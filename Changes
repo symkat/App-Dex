@@ -1,3 +1,6 @@
+0.2.0
+    - Rewrote it as a library
+    - Added tests
     - Added Changes file
     - Added README.md 
 
