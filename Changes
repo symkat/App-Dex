@@ -1,0 +1,8 @@
+    - Added Changes file
+    - Added README.md 
+
+0.1.0 Inital Version
+
+    - Runs shell commands defined in .dex.yaml or dex.yaml.
+    - Provides a menu with the description of commands.
+    - This repo dog-foods itself.
