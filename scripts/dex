@@ -1,0 +1,121 @@
+#!/usr/bin/env perl
+use warnings;
+use strict;
+use YAML::XS qw( LoadFile );
+use List::Util qw( first );
+use IPC::Run3;
+
+my $config_file = first { -e $_ } ( qw( dex.yaml .dex.yaml ) );
+
+die "This directory has no commands file.\n"
+    unless $config_file;
+
+my $config = validate_config(LoadFile( $config_file ));
+
+if ( ! @ARGV ) {
+    _show_menu($config);
+}
+
+while ( defined ( my $arg = shift @ARGV ) ) {
+    my $block = first { $_->{name} eq $arg } @{$config};
+    
+    if ( ! $block ) {
+        die "There is no such command.\n";
+    }
+
+    if ( @ARGV ) {
+        $config = $block->{children};
+        next;
+    }
+
+    _process_config_block( $block );
+}
+
+sub _process_config_block {
+    my ( $block ) = @_;
+
+    if ( $block->{shell} ) {
+        _run_block_shell( $block );
+    }
+
+    # If this didn't do anything useful, show the documentation for
+    # any sub-commands.
+    if ( ! $block->{shell} and exists $block->{children} ) {
+        _show_menu( $block->{children} );
+    }
+}
+
+sub _show_menu {
+    my ( $config, $indent ) = @_;
+
+    foreach my $block ( @{$config} ) {
+        printf( " " x (4 * ( $indent || 0 ) ) . "%-12s: %s\n", $block->{name}, $block->{desc} );
+        if ( $block->{children} ) {
+            _show_menu( $block->{children}, ( $indent || 0 ) + 1 );
+        }
+    }
+}
+
+sub _run_block_shell {
+    my ( $block ) = @_;
+
+    foreach my $command ( @{$block->{shell}} ) {
+        run3( $command );
+    }
+}
+
+
+# A Configuration Is Valid When:
+#
+# 1. It has a name
+# 2. It has a desc
+
+sub _is_valid_config {
+    my ( $config ) = @_;
+
+    my @errors;
+
+    if ( ref $config ne 'ARRAY' ) {
+        push @errors, {
+            message => "The top level YAML structure should be an array.  It is not.",
+        };
+        return @errors;
+    }
+
+    foreach my $block ( @{$config} ) {
+        push @errors, {
+            message => "Required key missing: name",
+            block   => $block,
+        } unless $block->{name};
+
+        push @errors, {
+            message => "Required key missing: desc",
+            block   => $block
+        } unless $block->{desc};
+
+        if ( $block->{children} ) {
+            push @errors, _is_valid_config( $block->{children} );
+        }
+    }
+
+    return @errors;
+}
+
+sub validate_config {
+    my ( $config ) = @_;
+
+    my @errors = _is_valid_config( $config );
+
+    if ( @errors ) {
+        require "Data/Dumper.pm";
+        print "There are errors in your .com.yaml file:\n";
+        foreach my $error ( @errors ) {
+            print "\tError: $error->{message}\n";
+            print "In this block: " . Data::Dumper::Dumper($error->{block})
+                if $error->{block};
+        }
+        exit -1;
+    }
+
+    return $config;
+}
