@@ -1,7 +1,7 @@
 use inc::Module::Install;
 
 name            'App-dex';
-all_from        'lib/App/dex.pm';
+all_from        'lib/App/Dex.pm';
 
 requires        'YAML::XS';
 requires        'IPC::Run3';

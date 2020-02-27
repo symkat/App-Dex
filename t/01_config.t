@@ -1,8 +1,10 @@
 #!/usr/bin/env perl
 use warnings;
 use strict;
-use Test::More skip_all => "Solve using dex and also deleting the default file...";
+use Test::More;
 use App::Dex;
+use File::Temp;
+use Cwd;
 
 my $tests = [
     {
@@ -54,6 +56,10 @@ my $tests = [
 ];
 
 foreach my $test ( @{$tests} ) {
+    my $cwd = getcwd();
+    my $dir = File::Temp->newdir;
+    chdir $dir->dirname;
+
     foreach my $filename ( @{$test->{make_files}} ) {
         BAIL_OUT "Error: File $filename is created by the test on line " . $test->{line} . " but exists already."
             if -e $filename;
@@ -66,6 +72,8 @@ foreach my $test ( @{$tests} ) {
     foreach my $filename ( @{$test->{make_files}} ) {
         unlink $filename;
     }
+
+    chdir $cwd;
 }
 
 done_testing();
