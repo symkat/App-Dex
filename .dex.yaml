@@ -2,15 +2,16 @@
   desc: "Run through the build process, including testing."
   shell:
     - ./fatpack.sh
+    - dzil test
     - dzil build
 - name: test
   desc: "Just test the changes"
   shell:
     - dzil test
-- name: publish
+- name: release
   desc: "Publish App::Dex to CPAN"
   shell:
-    - dzil publish
+    - dzil release
 - name: clean
   desc: "Remove artifacts"
   shell:
