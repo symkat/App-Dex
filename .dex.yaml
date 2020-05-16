@@ -22,4 +22,4 @@
   shell:
     - cpanm Dist::Zilla
     - dzil authordeps --missing | cpanm
-    - dzil listdeps | cpanm
+    - dzil listdeps --develop --missing | cpanm
