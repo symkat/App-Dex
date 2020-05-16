@@ -11,4 +11,4 @@
 - name: clean
   desc: "Remove artifacts"
   shell:
-    - rm -rf App-dex-*.tar.gz MANIFEST META.yml MYMETA.* Makefile blib Makefile.old
+    - rm -rf App-dex-*.tar.gz MANIFEST META.yml MYMETA.* Makefile blib Makefile.old pm_to_blib
