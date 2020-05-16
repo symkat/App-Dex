@@ -2,10 +2,13 @@
   desc: "Run through the build process."
   shell:
     - rm -f App-dex-*.tar.gz 
+    - ./fatpack.sh
     - perl Makefile.PL
+    - make
+    - make test
     - make manifest
     - make dist
 - name: clean
   desc: "Remove artifacts"
   shell:
-    - rm -rf App-dex-*.tar.gz MANIFEST META.yml MYMETA.* Makefile blib
+    - rm -rf App-dex-*.tar.gz MANIFEST META.yml MYMETA.* Makefile blib Makefile.old
