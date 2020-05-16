@@ -1,0 +1,7 @@
+extern
+.vstags
+.vscode
+.build
+*.swp
+*.kate-swp
+App-Dex-*

@@ -1,14 +1,23 @@
 - name: build
-  desc: "Run through the build process."
+  desc: "Run through the build process, including testing."
   shell:
-    - rm -f App-dex-*.tar.gz 
     - ./fatpack.sh
-    - perl Makefile.PL
-    - make
-    - make test
-    - make manifest
-    - make dist
+    - dzil build
+- name: test
+  desc: "Just test the changes"
+  shell:
+    - dzil test
+- name: publish
+  desc: "Publish App::Dex to CPAN"
+  shell:
+    - dzil publish
 - name: clean
   desc: "Remove artifacts"
   shell:
-    - rm -rf App-dex-*.tar.gz MANIFEST META.yml MYMETA.* Makefile blib Makefile.old pm_to_blib
+    - dzil clean
+# rm -rf App-dex-*.tar.gz MANIFEST META.yml MYMETA.* Makefile blib Makefile.old pm_to_blib
+- name: authordeps
+  desc: "Install distzilla and dependencies"
+  shell:
+    - cpanm Dist::Zilla
+    - dzil authordeps --missing | cpanm
