@@ -1,7 +1,7 @@
 package App::Dex;
 use Moo;
 use List::Util qw( first );
-use YAML::XS qw( LoadFile );
+use YAML::PP qw( LoadFile );
 use IPC::Run3;
 
 our $VERSION = "0.002000"; # 0.2.0
