@@ -9,7 +9,7 @@ $VERSION = eval $VERSION;
 
 has config_file => (
     is      => 'ro',
-    isa     => sub { -e  $_[0] },
+    isa     => sub { die 'Config file not found' unless $_[0] && -e $_[0] },
     lazy    => 1,
     default => sub {
         first { -e $_ } @{shift->config_file_names};
