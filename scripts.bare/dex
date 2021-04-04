@@ -2,6 +2,11 @@
 use warnings;
 use strict;
 use App::Dex;
+use Pod::Usage qw(pod2usage);
+
+if ( @ARGV && ( $ARGV[0] eq '--help' || $ARGV[0] eq '-h' ) ) {
+    pod2usage( -verbose => 2 );
+}
 
 my $app = App::Dex->new;
 
