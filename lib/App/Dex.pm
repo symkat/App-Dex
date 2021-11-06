@@ -4,7 +4,7 @@ use List::Util qw( first );
 use YAML::PP qw( LoadFile );
 use IPC::Run3;
 
-our $VERSION = '0.002002';
+our $VERSION = '0.002003';
 
 has config_file => (
     is      => 'ro',
