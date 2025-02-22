@@ -1,0 +1,35 @@
+version: 2
+vars: 
+  dir: 'somedir' 
+  package: 'my package'
+  cmd_var: 
+    from_command: 'test 0 -eq 1'
+    default: 6
+  pwd:
+    from_command: pwd | tr -d '\n'
+blocks:
+  - name: test
+    desc: "test version 2"
+    dir:  '[%pwd%]/lib' 
+    vars:
+      dir: 'localdir'
+      file: 'somefile'
+      truevar: 
+        from_env: IS_TRUE
+        default: 0
+      some_list:
+        - 'this'
+        - 'that' 
+    commands:
+      - diag: 'version 2 [%package%] [%dir%] [%file%] [%cmd_var%] [%pwd%]' 
+      - diag: diag dir [%var%] in [%pwd%]
+        for-vars: some_list
+      - exec: echo 'shell with for-vars [%var%]'
+        for-vars: 
+          - 'one'
+          - 'two'
+      - exec: echo 'conditional command'
+        condition: 1 -eq [%truevar%]
+      - exec: pwd 
+      - exec: pwd
+        dir:  '[%pwd%]/t'

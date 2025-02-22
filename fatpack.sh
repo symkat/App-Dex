@@ -7,7 +7,7 @@ set -e
 
 mkdir -p scripts
 export PERL5LIB="$PERL5LIB:$PWD/lib"
-fatpack trace scripts.bare/dex
+fatpack trace --use=App::Dex2 scripts.bare/dex
 fatpack packlists-for $(cat fatpacker.trace) > packlists
 fatpack tree $(cat packlists)
 rm scripts/dex </dev/null || echo "No packed dex present"

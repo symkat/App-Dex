@@ -1,0 +1,36 @@
+---
+version: 2
+vars:
+  root_var: 'I can be used in every block'
+  some_list:
+    - 'this'
+    - 'that'  
+  work_dir: 
+    from_command: pwd | tr -d '\n'
+
+blocks:
+  - name: var-example 
+    desc: An Example block command with global and block variables.
+    vars:
+      some_string: 'for this block only' 
+      env_var:
+        from_env: SECOND_CMD
+        default: 0
+    commands:
+      - exec: echo "Global var work_dir [% work_dir %], block variable [% some_string %]"
+      - exec: echo 'SECOND_CMD is set'
+        condition: '[%env_var%] -eq 1'
+  - name: loop-example
+    desc: An Example block command that looks over a list var.
+    commands: 
+      - exec: echo "repeating command with value [% var %] index [% index %]"
+        for-vars: some_list
+  - name: perl-info
+    desc: 'Perl Info'
+    vars:
+      perl5_version: 
+        from_command: "perl -MConfig -e 'print $Config{version}'"
+      perl5_lib: 
+        from_env: PERL5LIB 
+    commands:
+      - exec: echo "version [%perl5_version%] [%perl5_lib%]" 
