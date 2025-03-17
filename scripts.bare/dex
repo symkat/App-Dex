@@ -2,35 +2,9 @@
 use warnings;
 use strict;
 use App::Dex;
-use Pod::Usage qw(pod2usage);
-use Try::Tiny;
 
-if ( @ARGV && ( $ARGV[0] eq '--help' || $ARGV[0] eq '-h' ) ) {
-    pod2usage( -verbose => 2 );
-}
+exit App::Dex->load_version_from_config( argv => [@ARGV] )->run();
 
-my $app = App::Dex->new;
-
-# Throw an error if we couldn't find a config file.
-try { $app->config_file } catch { die "Error: No config file found.\n" };
-
-if ( @ARGV ) {
-    my $block = $app->resolve_block( [ @ARGV ] );
-
-    if ( ! $block ) {
-        if ( $ENV{DEX_FALLBACK_CMD} ) {
-            exec $ENV{DEX_FALLBACK_CMD}, @ARGV;
-        } else {
-            print STDERR "Error: No such command.\n\n";
-            $app->display_menu;
-            exit -1;
-        }
-    }
-
-    $app->process_block( $block );
-} else {
-    $app->display_menu;
-}
 
 =pod
 
@@ -64,7 +38,12 @@ I<Run the tests>.
 
 =head1 DEX FILE SPEC
 
-Dex uses YAML and expects the following format:
+Dex uses YAML and expects one the following formats: 
+
+=head2 Standard 
+
+This  format takes a list of C<blocks> with attributes that define a command 
+and its' sub commands.  
 
  ---
  - name: CommandName
@@ -93,3 +72,128 @@ following are supported attributes:
 
 =back
 
+=head2 Vesion 2 
+
+The Version 2 format replaces the  C<Standard> format and adds new options and 
+features. 
+
+     version: 2
+     vars:
+       work_dir: './t'
+       some_list:
+         - 'this'
+         - 'that'  
+     blocks:
+       - name: example 
+         desc: An Example block of commands.
+         commands:
+           - exec: echo 'Working in [%work_dir%]'
+           - diag:  [%var%] in [%work_dir%]
+             for-vars: some_list 
+
+
+This format is a dictionary that supports these attributes: 
+
+=over 4
+
+=item * version: This attribute must be present and set to 2. 
+
+=item * vars: This attribute takes a dictionary that defines variables that will available for use in all command definitions. They can be a number, string or list.
+
+ vars:
+   varName: 'some string or number'
+   varList: 
+     - one
+     - two
+     - three
+
+To use a variable within a block attribute, enclose the name of the variable with '[%' and '%]'
+
+ blocks:
+   - name: var-test
+     desc: "Example block with var" 
+     commands: 
+       - exec: echo 'varName = [%varName%]' 
+
+
+Var attributes also take a dictionary config with the following attributes: 
+
+=over 4
+
+=item * from_command: Set the variable to the STDOUT of this command. The command must have an exit value of 0 or the value will not be set.
+
+=item * from_env: Set the variable to the value of this environment variable.
+
+=item * default: If the execution of C<from_command> returns non-zero or the environment variable for C<from_env> is not set, set this value.
+ 
+  varFromCommand:
+    from_command: pwd | tr -d '\n'
+    default: 'Unknown directory'  
+
+=back 
+
+=item * blocks: Takes the same list of blocks similar to the C<Standard Format> 
+
+=over 4
+
+=item * name: The name that can be used on the command line to invoke the block
+
+=item * desc: The description given in the menu
+
+=item * vars: This attribute takes the same arguments as the top level vars attribute, but variables defined here are only availabe for commands defined in the same block.
+
+=item * commands: An array of dictionaries to that defined commands to run. The following attributes for each dictionary are supported:
+
+=over 4
+
+=item * diag: A string that will be echo'd to the terminal
+
+=item * dir: set the current working directory for commands executed after this.  You will be restored to the directory you started in once all commands finish.
+
+=item * for-vars: Takes a name of an existing list variable or a list. The command will executed foreach entry in the list, and the value and index for each iteration will be available as the C<var> and C<index> template variables.
+
+   - name: for-vars-test
+     desc: "Example block with for-var"
+     vars:
+       pwd:
+         from_command: pwd | tr -d '\n' 
+       some_list:
+         - 'this'
+         - 'that'  
+     commands:
+      - diag:  'value [%var%] at index [%index%]'
+        for-vars: some_list
+      - exec: echo 'shell with for-vars [%var%]'
+        for-vars: 
+          - 'one'
+          - 'two' 
+
+=item * condition: Takes a condition in the same format as the C<test> command.  The command will only execute if the condtion returns true, otherwise the command is skipped.
+
+    vars:
+      truevar: 
+        from_env: IS_TRUE
+        default: 0 
+    commands:
+      - exec: echo 'conditional command'
+        condition: 1 -eq [%truevar%]  
+
+=item * exec: The same as a C<shell> command, but you can make use of the C<for-vars>, C<dir> and C<condition> attributes and variables.
+
+=back
+
+=item * dir: set the current working directory for commands in this block. Specific commands can also change this directory.  You will be restored to the directory you started in once all commands finish. 
+
+=item * children: An array of blocks that takes all of the same arguments, use for subcommands
+
+=back 
+
+=back
+
+=head1 FALLBACK COMMAND
+
+When dex doesn't understand the command it will give an error and display the menu. It
+can be configured to allow another program to try to execute the command.
+
+Set the environment variable C<DEX_FALLBACK_CMD> to the command you would like to run
+instead.    

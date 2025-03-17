@@ -1,10 +1,12 @@
-package App::Dex;
+package App::Dex2;
 use Moo;
+use File::pushd qw|pushd|;
 use List::Util qw( first );
+use Pod::Usage qw(pod2usage);
+use Template::Simple;
+use Try::Tiny; 
 use YAML::PP qw( LoadFile );
 use IPC::Run3;
-use Try::Tiny;
-use Pod::Usage qw(pod2usage);
 
 our $VERSION = '0.002003';
 
@@ -13,8 +15,19 @@ has argv => (
     default => sub { [] }
 );
 
+has config_file => (
+    is      => 'ro',
+    isa     => sub { die "Error: No config file found\n" unless $_[0] && -e $_[0] },
+    lazy    => 1,
+    default => sub {
 
-our @CONFIG_FILE_NAMES = qw( dex.yaml .dex.yaml );
+        return $ENV{DEX_FILE} if $ENV{DEX_FILE};
+
+        return first { -e $_ } @{shift->config_file_names};
+    },
+);
+
+our @CONFIG_FILE_NAMES = qw( dex.yaml .dex.yaml ); 
 
 has config_file_names => (
     is      => 'ro',
@@ -22,44 +35,134 @@ has config_file_names => (
     default => sub {
         return [ @CONFIG_FILE_NAMES ],
     },
-); 
-
-has config_file => (
-    is      => 'ro',
-    isa     => sub { die "Error: No config file found\n" unless $_[0] && -e $_[0] },
-    lazy    => 1,
-    builder => '_find_config_file'
-
 );
-
-sub _find_config_file {
-    my $self = shift; 
-
-    return $self->find_config_file(@{$self->config_file_names});
-}
-
-sub find_config_file {
-    my ($class, @locations) = @_;
-
-    return $ENV{DEX_FILE} if ($ENV{DEX_FILE} && -e $ENV{DEX_FILE});
-
-    return (first { -e $_ } @locations);
-} 
 
 has config => (
     is      => 'ro',
+    isa     => sub { die "Error: Invaild Config Version\n" unless ref($_[0]) eq 'HASH' and $_[0]->{version} and $_[0]->{version} == 2 }, 
     lazy    => 1,
     builder => sub {
-        my $self = shift;
+        my ( $self ) = @_;
 
-        $self->load_config($self->config_file);
+        return try { LoadFile $self->config_file } catch { die "Error reading config file: \n$_" };
     },
 );
 
-sub load_config {
-    my ($class, $config_file) = @_; 
+has config_version => (
+    is      => 'ro',
+    lazy    => 1, 
+    builder => sub {
+        my ( $self ) = @_; 
 
-    return try { LoadFile $config_file } catch { die "Error reading config file: \n$_" };
+        return $self->config->{version};
+    },
+);
+
+
+has config_blocks => (
+    is      => 'ro',
+    lazy    => 1,
+    builder => sub {
+       shift->config->{blocks};
+    },
+);
+
+has global_vars => (
+    is      => 'ro',
+    lazy    => 1, 
+    builder => sub {
+        my ( $self ) = @_; 
+
+        return $self->init_vars($self->config->{vars});
+    },
+);
+
+sub init_vars {
+    my ( $self, $var_cfg ) = @_;
+
+    $var_cfg ||= {};
+    my $ret = {};
+
+    foreach my $var ( keys %$var_cfg ) {
+        my $val = $var_cfg->{$var};
+
+        if ( !ref($val) or ref($val) eq 'ARRAY' ) {
+            $val = { value => $val };
+        }
+        elsif( ref($val) ne 'HASH' ) {
+            die "Invalid var $var"
+        }
+
+        if ( $val->{from_command} ) {
+            local $?;
+
+            my $stdout;
+            run3(['/bin/bash', '-c', $val->{from_command}], undef, \$stdout );
+
+            if ( $stdout && !$? ) {
+                chomp $stdout;
+                my @lines = split(/\n/, $stdout); 
+                $ret->{$var} = scalar @lines == 1 ? $lines[0] : \@lines;
+            }
+        }
+        elsif ( $val->{from_env} ) { 
+            $ret->{$var} = $ENV{$val->{from_env}};
+        }
+
+        if (! defined $ret->{$var}) {
+            $ret->{$var} = $val->{value} || $val->{default};
+        }
+
+    }
+
+    return $ret;
+}
+
+has tt => (
+    is      => 'ro',
+    lazy    => 1, 
+    builder => sub {
+       Template::Simple->new();
+    },
+);
+
+sub render {
+    my ( $self, $tmpl, $vars ) = @_; 
+
+    return ${ $self->tt->render( $tmpl, { %{$self->global_vars}, %$vars } ) };
+}
+
+sub get_for_vars {
+    my ( $self, $list, $vars ) = @_;
+
+    return 1 if !$list;
+
+    # If we have an array already just return that.
+    if ( ref($list) eq 'ARRAY' ) { 
+        return @{$list};
+    }
+    # If we have a scalar value search for a matching local or global 
+    # var. Return an empty list if no match is found.
+    elsif ( $list && !ref($list) ) {
+        return @{ $vars->{$list} || $self->global_vars->{$list} || [] };
+    }
+
+    die "Invalid for-vars"
+}
+
+# Returns true if condition fails.
+sub check_cond_fail {
+    my ( $self, $cond_tmpl, $vars ) = @_;  
+
+    return 0 if !$cond_tmpl;
+
+    my $cond = $self->render( $cond_tmpl, $vars );
+
+    system('/bin/bash', '-c', "test $cond");
+
+    my $exit = $? >> 8;
+
+    return $exit;
 }
 
 has menu => (
@@ -67,7 +170,7 @@ has menu => (
     lazy    => 1,
     builder => sub {
         my ( $self ) = @_;
-        return [ $self->_menu_data( $self->config, 0 ) ];
+        return [ $self->_menu_data( $self->config_blocks, 0 ) ];
     }
 );
 
@@ -102,7 +205,7 @@ sub display_menu {
 sub resolve_block {
     my ( $self, $path ) = @_;
 
-    return $self->_resolve_block( $path, $self->config );
+    return $self->_resolve_block( $path, $self->config_blocks );
 }
 
 sub _resolve_block {
@@ -125,39 +228,34 @@ sub _resolve_block {
 sub process_block {
     my ( $self, $block ) = @_;
 
-    if ( $block->{shell} ) {
-        _run_block_shell( $block );
-    }
-}
+    my $vars = $self->init_vars( $block->{vars} );
 
-sub _run_block_shell {
-    my ( $block ) = @_;
+    my $dir       = $block->{dir}; 
+    my $block_dir = pushd $self->render( $dir, $vars ) if $dir;
 
-    foreach my $command ( @{$block->{shell}} ) {
-        run3( $command );
-    }
-}
+    $block->{commands} ||= [];
 
-sub load_version_from_config {
-    my ( $class, %params ) = @_;
+    foreach my $cfg ( @{$block->{commands}} ) {
 
-    my $config_file = $class->find_config_file(@CONFIG_FILE_NAMES) or die "Error: No config file found\n";
-    my $config      = $class->load_config($config_file);
+        if ( $self->check_cond_fail($cfg->{condition}, $vars) ) {
+           next; 
+        }
 
-    if ( ref($config) eq 'ARRAY' ) {
-        return App::Dex->new( config_file => $config_file,  config => $config, %params );
-    }
-    elsif (ref($config) eq 'HASH' ) {
+        if ( my $dir = $cfg->{dir} ) {
+            undef $block_dir; # calls File::pushd destructor to return us to original directory
+            $block_dir = pushd $self->render( $dir, { var => $_, %$vars } );
+        }
 
-        die "Invalid Config Version\n" 
-           unless $config->{version} and $config->{version} == 2;
+        if ( my $diag_tmpl = $cfg->{diag} ) {
+           $cfg->{exec} = "echo '$diag_tmpl'";
+        }
 
-        require App::Dex2;
+        if ( my $cmd_tmpl = $cfg->{exec} ) {
 
-        return App::Dex2->new( config_file => $config_file,  config => $config, %params );
-    }
-    else {
-        die "Invalid Config\n"
+            my $index = 0;
+            run3( $self->render( $cmd_tmpl, { var => $_, index => $index++, %$vars } ) )
+                foreach $self->get_for_vars($cfg->{'for-vars'}, $vars );
+        }
     }
 
 }
@@ -188,9 +286,8 @@ sub run {
     } else {
         $self->display_menu;
     }
- 
 
-} 
+}
 
 1;
 
